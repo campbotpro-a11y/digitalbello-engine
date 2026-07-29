@@ -81,7 +81,7 @@ const DAILY_FORMATS = [
   { label:"Mindset Take",  color:"#8B5CF6", icon:"🧠" },
 ];
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-2.0-flash";
 
 function sysPrompt() {
   return `You are an elite social media content strategist for DigitalBello.
