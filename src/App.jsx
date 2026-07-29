@@ -352,9 +352,6 @@ export default function App() {
   const dailyPostText = (post) =>
     `${post.hook}\n\n${post.items?.map((item, i) => `${i + 1}. ${item}`).join("\n\n")}\n\n${post.cta}\n\n${post.hashtags?.map(h => `#${h.replace(/^#/, "")}`).join(" ")}\n\n🎨 IMAGE PROMPT:\n${post.imagePrompt}`;
 
-  // ==== PART 1 ENDS HERE ====
-      // ==== PART 2 STARTS HERE ====
-
   return (
     <div style={s.root}>
       <header style={s.header}>
