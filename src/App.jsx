@@ -319,4 +319,282 @@ export default function App() {
     post.hook + "\n\n" + (post.items?.map((item, i) => (i + 1) + ". " + item).join("\n\n") || "") + "\n\n" + post.cta + "\n\n" + (post.hashtags?.map(h => "#" + h.replace(/^#/, "")).join(" ") || "") + "\n\n🎨 IMAGE PROMPT:\n" + post.imagePrompt;
 
   return (
-  
+      <div style={s.root}>
+      <header style={s.header}>
+        <div style={s.hRow}>
+          <div style={s.logo}>
+            <div style={s.logoMark}>DB</div>
+            <div>
+              <div style={s.logoName}>DigitalBello</div>
+              <div style={s.logoSub}>Content Engine · Gemini AI</div>
+            </div>
+          </div>
+          <div style={s.stats}>
+            {[
+              ["Posts", history.length],
+              ["Daily Sets", Math.floor(usedThemes.length / 4)],
+              ["Pillars", 5]
+            ].map(([l, v], i) => (
+              <div key={i} style={s.stat}>
+                <span style={s.statV}>{v}</span>
+                <span style={s.statL}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={s.tabs}>
+          {[
+            ["generate", "⚡ Generate"],
+            ["daily", "📅 Daily Plan"],
+            ["history", "📂 History (" + history.length + ")"]
+          ].map(([id, lbl]) => (
+            <button
+              key={id}
+              style={{ ...s.tab, ...(tab === id ? s.tabOn : {}) }}
+              onClick={() => setTab(id)}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main style={s.main}>
+        {tab === "generate" && (
+          <div style={s.panel}>
+            <div style={s.section}>
+              <div style={s.secTitle}>1. Pick a post type</div>
+              <div style={s.grid4}>
+                {TYPES.map(t => (
+                  <button
+                    key={t.id}
+                    style={{
+                      ...s.typeCard,
+                      borderColor: type === t.id ? t.color : "transparent",
+                      background: type === t.id ? t.color + "11" : "#fff",
+                    }}
+                    onClick={() => setType(t.id)}
+                  >
+                    <span style={{ fontSize: 24 }}>{t.icon}</span>
+                    <span style={{ ...s.typeLabel, color: t.color }}>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.section}>
+              <div style={s.secTitle}>2. Content pillar</div>
+              <div style={s.grid5}>
+                {BRAND.contentPillars.map(p => (
+                  <button
+                    key={p}
+                    style={{
+                      ...s.pillBtn,
+                      background: pillar === p ? "#111" : "#f3f4f6",
+                      color: pillar === p ? "#fff" : "#374151",
+                    }}
+                    onClick={() => setPillar(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.section}>
+              <div style={s.secTitle}>3. Topic (optional)</div>
+              <input
+                style={s.input}
+                value={topic}
+                onChange={e => setTopic(e.target.value)}
+                placeholder="e.g. How to use ChatGPT to write sales copy"
+              />
+              <div style={{...s.secTitle, marginTop: 12}}>Extra context (optional)</div>
+              <input
+                style={s.input}
+                value={extra}
+                onChange={e => setExtra(e.target.value)}
+                placeholder="e.g. Target Nigerian students, mention mobile apps only"
+              />
+            </div>
+
+            <button
+              style={{
+                ...s.genBtn,
+                opacity: !type || !pillar ? 0.5 : 1,
+                cursor: !type || !pillar ? "not-allowed" : "pointer",
+              }}
+              onClick={generate}
+              disabled={!type || !pillar || loading}
+            >
+              {loading ? "✨ Generating with Gemini..." : "⚡ Generate Post"}
+            </button>
+
+            {error && <div style={s.errorBox}>{error}</div>}
+
+            {result && (
+              <div style={s.resultBox}>
+                <div style={s.resultMeta}>
+                  <span style={{ ...s.badge, background: (typeObj?.color || "#111") + "22", color: typeObj?.color || "#111" }}>
+                    {typeObj?.icon} {typeObj?.label}
+                  </span>
+                  <span style={s.badge}>{result.pillar}</span>
+                  <span style={s.time}>{result.ts}</span>
+                </div>
+
+                <div style={s.hook}>{result.hook}</div>
+                <div style={s.caption}>{result.caption}</div>
+                <div style={s.cta}>{result.cta}</div>
+                <div style={s.tags}>
+                  {result.hashtags?.map((h, i) => (
+                    <span key={i} style={s.tag}>#{h.replace(/^#/, "")}</span>
+                  ))}
+                </div>
+
+                {imgLoad && <div style={s.imgLoading}>🎨 Generating image...</div>}
+                {imgUrl && (
+                  <div style={s.imgWrap}>
+                    <img src={imgUrl} alt="generated" style={s.img} />
+                  </div>
+                )}
+
+                <div style={s.viralTip}>💡 {result.viralTip}</div>
+                <div style={s.postingTime}>🕐 Best posting time: {result.postingTime}</div>
+
+                <div style={s.actions}>
+                  <button style={s.copyBtn} onClick={() => doCopy(fullPost, "main")}>
+                    {copied === "main" ? "✅ Copied!" : "📋 Copy Full Post"}
+                  </button>
+                  <button style={s.copyBtn} onClick={() => doCopy(result.imagePrompt, "img")}>
+                    {copied === "img" ? "✅ Copied!" : "🎨 Copy Image Prompt"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "daily" && (
+          <div style={s.panel}>
+            <div style={s.dailyHeader}>
+              <div style={s.dailyTitle}>📅 Daily Content Plan</div>
+              <div style={s.dailySub}>Generates 4 unique posts using Gemini 2.0 Flash</div>
+            </div>
+
+            <button
+              style={s.genBtn}
+              onClick={generateDaily}
+              disabled={dailyLoading}
+            >
+              {dailyLoading ? "✨ Cooking 4 posts with Gemini..." : "📅 Generate Daily Plan (×4)"}
+            </button>
+
+            {dailyError && <div style={s.errorBox}>{dailyError}</div>}
+
+            {dailyPosts.length > 0 && (
+              <div style={s.dailyStats}>
+                Generated {dailyPosts.length} posts · {usedThemes.length} unique themes used
+              </div>
+            )}
+
+            <div style={s.dailyGrid}>
+              {dailyPosts.map((post, i) => (
+                <div
+                  key={post.id}
+                  style={{
+                    ...s.dailyCard,
+                    borderLeft: "4px solid " + post.format.color,
+                    boxShadow: activeCard === i ? "0 8px 30px rgba(0,0,0,0.12)" : "0 2px 8px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <div
+                    style={s.dailyCardHeader}
+                    onClick={() => setActiveCard(activeCard === i ? -1 : i)}
+                  >
+                    <div style={s.dailyCardMeta}>
+                      <span style={{ fontSize: 20 }}>{post.format.icon}</span>
+                      <span style={{ ...s.dailyFmt, color: post.format.color }}>{post.format.label}</span>
+                      <span style={s.dailySeed}>{post.seed}</span>
+                    </div>
+                    <span style={s.chevron}>{activeCard === i ? "▲" : "▼"}</span>
+                  </div>
+
+                  {activeCard === i && (
+                    <div style={s.dailyCardBody}>
+                      <div style={s.hook}>{post.hook}</div>
+                      <div style={s.itemsList}>
+                        {post.items?.map((item, idx) => (
+                          <div key={idx} style={s.itemRow}>
+                            <span style={{ ...s.itemNum, background: post.format.color }}>{idx + 1}</span>
+                            <span style={s.itemText}>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={s.cta}>{post.cta}</div>
+                      <div style={s.tags}>
+                        {post.hashtags?.map((h, idx) => (
+                          <span key={idx} style={s.tag}>#{h.replace(/^#/, "")}</span>
+                        ))}
+                      </div>
+
+                      {dailyImgLoads[i] && <div style={s.imgLoading}>🎨 Generating image...</div>}
+                      {dailyImgs[i] && (
+                        <div style={s.imgWrap}>
+                          <img src={dailyImgs[i]} alt="daily" style={s.img} />
+                        </div>
+                      )}
+
+                      <div style={s.viralTip}>💡 {post.viralTip}</div>
+                      <div style={s.actions}>
+                        <button style={s.copyBtn} onClick={() => doC4(dailyPostText(post), "d" + i)}>
+                          {copied4["d" + i] ? "✅ Copied!" : "📋 Copy Post"}
+                        </button>
+                        <button style={s.copyBtn} onClick={() => doC4(post.imagePrompt, "di" + i)}>
+                          {copied4["di" + i] ? "✅ Copied!" : "🎨 Copy Image Prompt"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === "history" && (
+          <div style={s.panel}>
+            <div style={s.secTitle}>📂 Recent Generations</div>
+            {history.length === 0 ? (
+              <div style={s.empty}>No posts yet. Generate your first one in the ⚡ Generate tab!</div>
+            ) : (
+              <div style={s.historyList}>
+                {history.map((h, i) => (
+                  <div key={h.id} style={s.historyCard}>
+                    <div style={s.historyMeta}>
+                      <span style={{ ...s.badge, background: (TYPES.find(t => t.id === h.contentType)?.color || "#111") + "22", color: TYPES.find(t => t.id === h.contentType)?.color || "#111" }}>
+                        {TYPES.find(t => t.id === h.contentType)?.icon} {TYPES.find(t => t.id === h.contentType)?.label}
+                      </span>
+                      <span style={s.badge}>{h.pillar}</span>
+                      <span style={s.time}>{h.ts}</span>
+                    </div>
+                    <div style={s.historyHook}>{h.hook}</div>
+                    <div style={s.actions}>
+                      <button style={s.smallBtn} onClick={() => doCopy(
+                        h.hook + "\n\n" + (h.caption || h.items?.join("\n\n") || "") + "\n\n" + h.cta + "\n\n" + (h.hashtags?.map(tag => "#" + tag.replace(/^#/, "")).join(" ") || ""),
+                        "h" + i
+                      )}>
+                        {copied === "h" + i ? "✅" : "📋"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+      }
+            
