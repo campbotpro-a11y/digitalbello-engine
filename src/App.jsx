@@ -270,23 +270,48 @@ export default function App() {
     }
   }, [type, pillar, topic, extra]);
 
-  const generateDaily = useCallback(async () => {
+    const generateDaily = useCallback(async () => {
     if (!apiKey) { setDailyError("API key missing. Add VITE_GEMINI_API_KEY to Render environment variables."); return; }
+    
     setDailyLoading(true); setDailyError(null);
     setDailyPosts([]); setDailyImgs({}); setDailyImgLoads({});
     setActiveCard(0);
+
     try {
       const available = DAILY_TOPICS.filter(t => !usedThemes.includes(t.theme));
       const pool = available.length >= 4 ? available : DAILY_TOPICS;
       const shuffled = [...pool].sort(() => Math.random() - 0.5);
-      const seeds = shuffled.slice(0,4);
-      const calls = seeds.map((seed, i) =>
-        callGemini(apiKey, dailySysPrompt(), dailyUserPrompt(seed, DAILY_FORMATS[i], usedThemes), 1200)
-        .then(raw => {
-          const parsed = JSON.parse(raw);
-          return { ...parsed, seed: seed.theme, format: DAILY_FORMATS[i], ts: new Date().toLocaleTimeString(), id: Date.now() + i, idx: i };
-        })
-      );
+      const seeds = shuffled.slice(0, 4);
+      const results = [];
+
+      // Call ONE at a time with delay (avoids rate limits)
+      for (let i = 0; i < seeds.length; i++) {
+        const raw = await callGemini(apiKey, dailySysPrompt(), dailyUserPrompt(seeds[i], DAILY_FORMATS[i], usedThemes), 1200);
+        const parsed = JSON.parse(raw);
+        results.push({
+          ...parsed,
+          seed: seeds[i].theme,
+          format: DAILY_FORMATS[i],
+          ts: new Date().toLocaleTimeString(),
+          id: Date.now() + i,
+          idx: i,
+        });
+        setDailyPosts([...results]); // Show progress
+        loadDailyImg(i, parsed.imagePrompt);
+        if (i < seeds.length - 1) {
+          await new Promise(r => setTimeout(r, 3000)); // Wait 3 seconds
+        }
+      }
+
+      setDailyPosts(results);
+      setUsedThemes(p => [...p, ...seeds.map(s => s.theme)]);
+    } catch(e) {
+      setDailyError(e.message || "Daily generation failed — please try again.");
+    } finally {
+      setDailyLoading(false);
+    }
+  }, [usedThemes]);
+
       const results = await Promise.all(calls);
       setDailyPosts(results);
       setUsedThemes(p => [...p, ...seeds.map(s => s.theme)]);
