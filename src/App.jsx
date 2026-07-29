@@ -270,7 +270,7 @@ export default function App() {
     }
   }, [type, pillar, topic, extra]);
 
-    const generateDaily = useCallback(async () => {
+  const generateDaily = useCallback(async () => {
     if (!apiKey) { setDailyError("API key missing. Add VITE_GEMINI_API_KEY to Render environment variables."); return; }
     
     setDailyLoading(true); setDailyError(null);
@@ -284,7 +284,6 @@ export default function App() {
       const seeds = shuffled.slice(0, 4);
       const results = [];
 
-      // Call ONE at a time with delay (avoids rate limits)
       for (let i = 0; i < seeds.length; i++) {
         const raw = await callGemini(apiKey, dailySysPrompt(), dailyUserPrompt(seeds[i], DAILY_FORMATS[i], usedThemes), 1200);
         const parsed = JSON.parse(raw);
@@ -296,6 +295,22 @@ export default function App() {
           id: Date.now() + i,
           idx: i,
         });
+        setDailyPosts([...results]);
+        loadDailyImg(i, parsed.imagePrompt);
+        if (i < seeds.length - 1) {
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+
+      setDailyPosts(results);
+      setUsedThemes(p => [...p, ...seeds.map(s => s.theme)]);
+    } catch(e) {
+      setDailyError(e.message || "Daily generation failed — please try again.");
+    } finally {
+      setDailyLoading(false);
+    }
+  }, [usedThemes]);
+
         setDailyPosts([...results]); // Show progress
         loadDailyImg(i, parsed.imagePrompt);
         if (i < seeds.length - 1) {
