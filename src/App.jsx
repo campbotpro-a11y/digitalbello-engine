@@ -82,3 +82,236 @@ const DAILY_FORMATS = [
 ];
 
 const GROK_MODEL = "grok-3-mini-fast";
+function sysPrompt() {
+  return `You are an elite social media content strategist for DigitalBello.
+Brand: ${BRAND.positioning}
+Audience: ${BRAND.audience}
+Tone: ${BRAND.tone}
+RULES:
+- Hook stops scroll in 3 seconds
+- Globally relatable, no region-specific refs
+- Drive SAVES, SHARES, COMMENTS (keyword CTAs)
+- Short punchy paragraphs, 1-3 lines max
+- 10-15 hashtags including #DigitalBello
+- imagePrompt: vivid, NO TEXT IN IMAGE, editorial + digital art
+Return ONLY valid JSON, no markdown:
+{
+  "hook": "scroll-stopping first line",
+  "caption": "full post body with \\n line breaks",
+  "cta": "call to action",
+  "hashtags": ["tag1","tag2"],
+  "imagePrompt": "detailed image generation prompt, no text in image",
+  "postingTime": "best time WAT",
+  "viralTip": "one specific reach tip"
+}`;
+}
+
+function userPrompt(type, pillar, topic, extra) {
+  const desc = {
+    authority: "a text-only authority post that establishes expertise",
+    story: "a personal story/case study with transformation arc",
+    list: "a high-save numbered list with dopamine-triggering items",
+    tutorial: "a step-by-step beginner tutorial, immediately actionable",
+    reel: "a 30-60 second reel script with hook, fast-cut sections, pattern interrupts",
+    hidden: "a hidden resources / secret tools post optimised for saves",
+    contrarian: "a contrarian take challenging common beliefs, sparks debate",
+    mindset: "a mindset/future-of-work post with emotional urgency",
+  };
+  return `Generate a complete ${desc[type]} for the "${pillar}" pillar.
+Topic: ${topic || pillar + " for beginners"}
+Context: ${extra || "globally relatable, beginner-friendly, mobile-first"}
+Make it feel human, bold, punchy, real.`;
+}
+
+function dailySysPrompt() {
+  return `You are an elite AI content strategist for DigitalBello — a global AI education brand for beginners.
+Brand: ${BRAND.positioning}
+Audience: ${BRAND.audience}
+Tone: ${BRAND.tone}
+FORMAT RULES (STRICT):
+1. Start with the HOOK — bold, punchy, scroll-stopping (1-4 lines)
+2. Blank line, then numbered prompts/steps/tips — each is a mini value bomb
+3. End with save/share CTA
+4. 10-15 hashtags including #DigitalBello
+Return ONLY valid JSON, no markdown:
+{
+  "hook": "viral hook (1-4 lines, ends with 👇 or ⬇️)",
+  "items": ["prompt or tip 1", "prompt or tip 2", "..."],
+  "cta": "save/share call to action",
+  "hashtags": ["tag1","tag2"],
+  "imagePrompt": "vivid image generation prompt, NO TEXT IN IMAGE",
+  "postingTime": "best WAT time",
+  "viralTip": "one tip to maximise reach"
+}`;
+}
+
+function dailyUserPrompt(seed, format, allUsedThemes) {
+  const formatGuide = {
+    "Prompts List":  "Give 6-8 numbered copy-paste prompts the reader can use immediately.",
+    "Step-by-Step":  "Give 5-7 numbered steps forming a clear beginner workflow.",
+    "Tools Roundup": "Give 5-7 numbered AI tools or free resources with one-line descriptions.",
+    "Mindset Take":  "Give 5-6 numbered mindset shifts or honest truths about AI and online income.",
+  };
+  return `Create a viral DigitalBello daily post.
+TOPIC SEED: "${seed.theme}"
+HOOK: "${seed.hook}"
+FORMAT: ${format.label} — ${formatGuide[format.label]}
+Make every numbered item feel like copy-paste gold for a beginner.
+AVOID these already-used themes: ${allUsedThemes.length > 0 ? allUsedThemes.join(", ") : "none yet"}`;
+}
+
+function copyText(text, onDone) {
+  const fallback = () => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    onDone();
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(onDone).catch(fallback);
+  } else { fallback(); }
+}
+
+async function makeImage(prompt) {
+  const enc = encodeURIComponent(prompt + ", no text, no watermark, ultra HD, social media visual");
+  return "https://image.pollinations.ai/prompt/" + enc + "?width=1080&height=1080&nologo=true&seed=" + Date.now();
+}
+
+// ===== GROK API CALL (xAI) =====
+async function callGrok(apiKey, systemText, userText, maxTokens) {
+  const url = "https://api.x.ai/v1/chat/completions";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: GROK_MODEL,
+      messages: [
+        { role: "system", content: systemText },
+        { role: "user", content: userText },
+      ],
+      temperature: 0.7,
+      max_tokens: maxTokens || 1000,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || "Grok API error: " + res.status);
+  }
+
+  const data = await res.json();
+  const raw = data.choices?.[0]?.message?.content || "";
+  return raw.replace(/```json|```/g, "").trim();
+}
+
+export default function App() {
+  const [tab, setTab] = useState("generate");
+  const [type, setType] = useState(null);
+  const [pillar, setPillar] = useState(null);
+  const [topic, setTopic] = useState("");
+  const [extra, setExtra] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [imgLoad, setImgLoad] = useState(false);
+  const [result, setResult] = useState(null);
+  const [imgUrl, setImgUrl] = useState(null);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyPosts, setDailyPosts] = useState([]);
+  const [dailyImgs, setDailyImgs] = useState({});
+  const [dailyImgLoads, setDailyImgLoads] = useState({});
+  const [dailyError, setDailyError] = useState(null);
+  const [usedThemes, setUsedThemes] = useState([]);
+  const [copied4, setCopied4] = useState({});
+  const [activeCard, setActiveCard] = useState(0);
+
+  const doCopy = (text, key) => copyText(text, () => {
+    setCopied(key); setTimeout(() => setCopied(null), 2500);
+  });
+
+  const doC4 = (text, key) => copyText(text, () => {
+    setCopied4(p => ({ ...p, [key]: true }));
+    setTimeout(() => setCopied4(p => ({ ...p, [key]: false })), 2500);
+  });
+
+  const loadDailyImg = async (idx, prompt) => {
+    if (!prompt) return;
+    setDailyImgLoads(p => ({ ...p, [idx]: true }));
+    try {
+      const url = await makeImage(prompt);
+      setDailyImgs(p => ({ ...p, [idx]: url }));
+    } catch (e) { console.error(e); }
+    finally { setDailyImgLoads(p => ({ ...p, [idx]: false })); }
+  };
+
+  const generate = useCallback(async () => {
+    if (!apiKey) { setError("API key missing. Add VITE_GROK_API_KEY to your environment variables."); return; }
+    if (!type || !pillar) return;
+    setLoading(true); setError(null); setResult(null); setImgUrl(null);
+    try {
+      const raw = await callGrok(apiKey, sysPrompt(), userPrompt(type, pillar, topic, extra), 1000);
+      const parsed = JSON.parse(raw);
+      const entry = { ...parsed, contentType: type, pillar, topic: topic || pillar, ts: new Date().toLocaleTimeString(), id: Date.now() };
+      setResult(entry);
+      setHistory(p => [entry, ...p].slice(0, 20));
+      setImgLoad(true);
+      try { setImgUrl(await makeImage(parsed.imagePrompt)); } catch (e) {}
+      finally { setImgLoad(false); }
+    } catch (e) {
+      setError(e.message || "Generation failed — please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [type, pillar, topic, extra]);
+
+  const generateDaily = useCallback(async () => {
+    if (!apiKey) { setDailyError("API key missing. Add VITE_GROK_API_KEY to your environment variables."); return; }
+    setDailyLoading(true); setDailyError(null);
+    setDailyPosts([]); setDailyImgs({}); setDailyImgLoads({});
+    setActiveCard(0);
+    try {
+      const available = DAILY_TOPICS.filter(t => !usedThemes.includes(t.theme));
+      const pool = available.length >= 4 ? available : DAILY_TOPICS;
+      const shuffled = [...pool].sort(() => Math.random() - 0.5);
+      const seeds = shuffled.slice(0, 4);
+      const results = [];
+      for (let i = 0; i < seeds.length; i++) {
+        const raw = await callGrok(apiKey, dailySysPrompt(), dailyUserPrompt(seeds[i], DAILY_FORMATS[i], usedThemes), 1200);
+        const parsed = JSON.parse(raw);
+        results.push({
+          ...parsed,
+          seed: seeds[i].theme,
+          format: DAILY_FORMATS[i],
+          ts: new Date().toLocaleTimeString(),
+          id: Date.now() + i,
+          idx: i,
+        });
+        setDailyPosts([...results]);
+        loadDailyImg(i, parsed.imagePrompt);
+        if (i < seeds.length - 1) {
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+      setDailyPosts(results);
+      setUsedThemes(p => [...p, ...seeds.map(s => s.theme)]);
+    } catch (e) {
+      setDailyError(e.message || "Daily generation failed — please try again.");
+    } finally {
+      setDailyLoading(false);
+    }
+  }, [usedThemes]);
+
+  const typeObj = TYPES.find(t => t.id === type);
+  const fullPost = result
+    ? result.hook + "\n" + result.caption + "\n" + result.cta + "\n" + (result.hashtags?.map(h => "#" + h.replace(/^#/, "")).join(" ") || "") + "\n🎨 IMAGE PROMPT:\n" + result.imagePrompt
+    : "";
+  const dailyPostText = (post) =>
+    post.hook + "\n" + (post.items?.map((item, i) => (i + 1) + ". " + item).join("\n") || "") + "\n" + post.cta + "\n" + (post.hashtags?.map(h => "#" + h.replace(/^#/, "")).join(" ") || "") + "\n🎨 IMAGE PROMPT:\n" + post.imagePrompt;
