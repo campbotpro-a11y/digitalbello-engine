@@ -215,3 +215,393 @@ async function callOpenRouter(apiKey, systemText, userText, maxTokens) {
   const raw = data.choices?.[0]?.message?.content || "";
   return raw.replace(/```json|```/g, "").trim();
 }
+export default function App() {
+  const [tab, setTab] = useState("generate");
+  const [type, setType] = useState(null);
+  const [pillar, setPillar] = useState(null);
+  const [topic, setTopic] = useState("");
+  const [extra, setExtra] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [imgLoad, setImgLoad] = useState(false);
+  const [result, setResult] = useState(null);
+  const [imgUrl, setImgUrl] = useState(null);
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyPosts, setDailyPosts] = useState([]);
+  const [dailyImgs, setDailyImgs] = useState({});
+  const [dailyImgLoads, setDailyImgLoads] = useState({});
+  const [dailyError, setDailyError] = useState(null);
+  const [usedThemes, setUsedThemes] = useState([]);
+  const [copied4, setCopied4] = useState({});
+  const [activeCard, setActiveCard] = useState(0);
+
+  const doCopy = (text, key) => copyText(text, () => {
+    setCopied(key); setTimeout(()=>setCopied(null),2500);
+  });
+
+  const doC4 = (text, key) => copyText(text, () => {
+    setCopied4(p=>({...p,[key]:true}));
+    setTimeout(()=>setCopied4(p=>({...p,[key]:false})),2500);
+  });
+
+  const loadDailyImg = async (idx, prompt) => {
+    if (!prompt) return;
+    setDailyImgLoads(p=>({...p,[idx]:true}));
+    try {
+      const url = await makeImage(prompt);
+      setDailyImgs(p=>({...p,[idx]:url}));
+    } catch(e) { console.error(e); }
+    finally { setDailyImgLoads(p=>({...p,[idx]:false})); }
+  };
+
+  const generate = useCallback(async () => {
+    if (!apiKey) { setError("API key missing. Add VITE_OPENROUTER_API_KEY to environment variables."); return; }
+    if (!type || !pillar) return;
+    setLoading(true); setError(null); setResult(null); setImgUrl(null);
+    try {
+      const raw = await callOpenRouter(apiKey, sysPrompt(), userPrompt(type, pillar, topic, extra), 1000);
+      const parsed = JSON.parse(raw);
+      const entry = { ...parsed, contentType: type, pillar, topic: topic || pillar, ts: new Date().toLocaleTimeString(), id: Date.now() };
+      setResult(entry);
+      setHistory(p => [entry, ...p].slice(0, 20));
+      setImgLoad(true);
+      try { setImgUrl(await makeImage(parsed.imagePrompt)); } catch(e){}
+      finally { setImgLoad(false); }
+    } catch(e) {
+      setError(e.message || "Generation failed — please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [type, pillar, topic, extra]);
+
+  const generateDaily = useCallback(async () => {
+    if (!apiKey) { setDailyError("API key missing. Add VITE_OPENROUTER_API_KEY to environment variables."); return; }
+    setDailyLoading(true); setDailyError(null);
+    setDailyPosts([]); setDailyImgs({}); setDailyImgLoads({});
+    setActiveCard(0);
+    try {
+      const available = DAILY_TOPICS.filter(t => !usedThemes.includes(t.theme));
+      const pool = available.length >= 4 ? available : DAILY_TOPICS;
+      const shuffled = [...pool].sort(() => Math.random() - 0.5);
+      const seeds = shuffled.slice(0, 4);
+      const results = [];
+
+      for (let i = 0; i < seeds.length; i++) {
+        const raw = await callOpenRouter(apiKey, dailySysPrompt(), dailyUserPrompt(seeds[i], DAILY_FORMATS[i], usedThemes), 1200);
+        const parsed = JSON.parse(raw);
+        results.push({
+          ...parsed,
+          seed: seeds[i].theme,
+          format: DAILY_FORMATS[i],
+          ts: new Date().toLocaleTimeString(),
+          id: Date.now() + i,
+          idx: i,
+        });
+        setDailyPosts([...results]);
+        loadDailyImg(i, parsed.imagePrompt);
+        if (i < seeds.length - 1) {
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+
+      setDailyPosts(results);
+      setUsedThemes(p => [...p, ...seeds.map(s => s.theme)]);
+    } catch(e) {
+      setDailyError(e.message || "Daily generation failed — please try again.");
+    } finally {
+      setDailyLoading(false);
+    }
+  }, [usedThemes]);
+
+  const typeObj = TYPES.find(t => t.id === type);
+  
+  const fullPost = result
+    ? result.hook + "\n\n" + result.caption + "\n\n" + result.cta + "\n\n" + (result.hashtags?.map(h => "#" + h.replace(/^#/, "")).join(" ") || "") + "\n\n🎨 IMAGE PROMPT:\n" + result.imagePrompt
+    : "";
+
+  const dailyPostText = (post) =>
+    post.hook + "\n\n" + (post.items?.map((item, i) => (i + 1) + ". " + item).join("\n\n") || "") + "\n\n" + post.cta + "\n\n" + (post.hashtags?.map(h => "#" + h.replace(/^#/, "")).join(" ") || "") + "\n\n🎨 IMAGE PROMPT:\n" + post.imagePrompt;
+
+  return (
+    <div style={s.root}>
+      <header style={s.header}>
+        <div style={s.hRow}>
+          <div style={s.logo}>
+            <div style={s.logoMark}>DB</div>
+            <div>
+              <div style={s.logoName}>DigitalBello</div>
+              <div style={s.logoSub}>Content Engine · OpenRouter AI</div>
+            </div>
+          </div>
+          <div style={s.stats}>
+            {[
+              ["Posts", history.length],
+              ["Daily Sets", Math.floor(usedThemes.length / 4)],
+              ["Pillars", 5]
+            ].map(([l, v], i) => (
+              <div key={i} style={s.stat}>
+                <span style={s.statV}>{v}</span>
+                <span style={s.statL}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={s.tabs}>
+          {[
+            ["generate", "⚡ Generate"],
+            ["daily", "📅 Daily Plan"],
+            ["history", "📂 History (" + history.length + ")"]
+          ].map(([id, lbl]) => (
+            <button
+              key={id}
+              style={{ ...s.tab, ...(tab === id ? s.tabOn : {}) }}
+              onClick={() => setTab(id)}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main style={s.main}>
+        {tab === "generate" && (
+          <div style={s.panel}>
+            <div style={s.section}>
+              <div style={s.secTitle}>1. Pick a post type</div>
+              <div style={s.grid4}>
+                {TYPES.map(t => (
+                  <button
+                    key={t.id}
+                    style={{
+                      ...s.typeCard,
+                      borderColor: type === t.id ? t.color : "transparent",
+                      background: type === t.id ? t.color + "11" : "#fff",
+                    }}
+                    onClick={() => setType(t.id)}
+                  >
+                    <span style={{ fontSize: 24 }}>{t.icon}</span>
+                    <span style={{ ...s.typeLabel, color: t.color }}>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.section}>
+              <div style={s.secTitle}>2. Content pillar</div>
+              <div style={s.grid5}>
+                {BRAND.contentPillars.map(p => (
+                  <button
+                    key={p}
+                    style={{
+                      ...s.pillBtn,
+                      background: pillar === p ? "#111" : "#f3f4f6",
+                      color: pillar === p ? "#fff" : "#374151",
+                    }}
+                    onClick={() => setPillar(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.section}>
+              <div style={s.secTitle}>3. Topic (optional)</div>
+              <input
+                style={s.input}
+                value={topic}
+                onChange={e => setTopic(e.target.value)}
+                placeholder="e.g. How to use ChatGPT to write sales copy"
+              />
+              <div style={{...s.secTitle, marginTop: 12}}>Extra context (optional)</div>
+              <input
+                style={s.input}
+                value={extra}
+                onChange={e => setExtra(e.target.value)}
+                placeholder="e.g. Target Nigerian students, mention mobile apps only"
+              />
+            </div>
+
+            <button
+              style={{
+                ...s.genBtn,
+                opacity: !type || !pillar ? 0.5 : 1,
+                cursor: !type || !pillar ? "not-allowed" : "pointer",
+              }}
+              onClick={generate}
+              disabled={!type || !pillar || loading}
+            >
+              {loading ? "✨ Generating with OpenRouter..." : "⚡ Generate Post"}
+            </button>
+
+            {error && <div style={s.errorBox}>{error}</div>}
+
+            {result && (
+              <div style={s.resultBox}>
+                <div style={s.resultMeta}>
+                  <span style={{ ...s.badge, background: (typeObj?.color || "#111") + "22", color: typeObj?.color || "#111" }}>
+                    {typeObj?.icon} {typeObj?.label}
+                  </span>
+                  <span style={s.badge}>{result.pillar}</span>
+                  <span style={s.time}>{result.ts}</span>
+                </div>
+
+                <div style={s.hook}>{result.hook}</div>
+                <div style={s.caption}>{result.caption}</div>
+                <div style={s.cta}>{result.cta}</div>
+                <div style={s.tags}>
+                  {result.hashtags?.map((h, i) => (
+                    <span key={i} style={s.tag}>#{h.replace(/^#/, "")}</span>
+                  ))}
+                </div>
+
+                {imgLoad && <div style={s.imgLoading}>🎨 Generating image...</div>}
+                {imgUrl && (
+                  <div style={s.imgWrap}>
+                    <img src={imgUrl} alt="generated" style={s.img} />
+                  </div>
+                )}
+
+                <div style={s.viralTip}>💡 {result.viralTip}</div>
+                <div style={s.postingTime}>🕐 Best posting time: {result.postingTime}</div>
+
+                <div style={s.actions}>
+                  <button style={s.copyBtn} onClick={() => doCopy(fullPost, "main")}>
+                    {copied === "main" ? "✅ Copied!" : "📋 Copy Full Post"}
+                  </button>
+                  <button style={s.copyBtn} onClick={() => doCopy(result.imagePrompt, "img")}>
+                    {copied === "img" ? "✅ Copied!" : "🎨 Copy Image Prompt"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "daily" && (
+          <div style={s.panel}>
+            <div style={s.dailyHeader}>
+              <div style={s.dailyTitle}>📅 Daily Content Plan</div>
+              <div style={s.dailySub}>Generates 4 unique posts using OpenRouter Free</div>
+            </div>
+
+            <button
+              style={s.genBtn}
+              onClick={generateDaily}
+              disabled={dailyLoading}
+            >
+              {dailyLoading ? "✨ Cooking 4 posts with OpenRouter..." : "📅 Generate Daily Plan (×4)"}
+            </button>
+
+            {dailyError && <div style={s.errorBox}>{dailyError}</div>}
+
+            {dailyPosts.length > 0 && (
+              <div style={s.dailyStats}>
+                Generated {dailyPosts.length} posts · {usedThemes.length} unique themes used
+              </div>
+            )}
+
+            <div style={s.dailyGrid}>
+              {dailyPosts.map((post, i) => (
+                <div
+                  key={post.id}
+                  style={{
+                    ...s.dailyCard,
+                    borderLeft: "4px solid " + post.format.color,
+                    boxShadow: activeCard === i ? "0 8px 30px rgba(0,0,0,0.12)" : "0 2px 8px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <div
+                    style={s.dailyCardHeader}
+                    onClick={() => setActiveCard(activeCard === i ? -1 : i)}
+                  >
+                    <div style={s.dailyCardMeta}>
+                      <span style={{ fontSize: 20 }}>{post.format.icon}</span>
+                      <span style={{ ...s.dailyFmt, color: post.format.color }}>{post.format.label}</span>
+                      <span style={s.dailySeed}>{post.seed}</span>
+                    </div>
+                    <span style={s.chevron}>{activeCard === i ? "▲" : "▼"}</span>
+                  </div>
+
+                  {activeCard === i && (
+                    <div style={s.dailyCardBody}>
+                      <div style={s.hook}>{post.hook}</div>
+                      <div style={s.itemsList}>
+                        {post.items?.map((item, idx) => (
+                          <div key={idx} style={s.itemRow}>
+                            <span style={{ ...s.itemNum, background: post.format.color }}>{idx + 1}</span>
+                            <span style={s.itemText}>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={s.cta}>{post.cta}</div>
+                      <div style={s.tags}>
+                        {post.hashtags?.map((h, idx) => (
+                          <span key={idx} style={s.tag}>#{h.replace(/^#/, "")}</span>
+                        ))}
+                      </div>
+
+                      {dailyImgLoads[i] && <div style={s.imgLoading}>🎨 Generating image...</div>}
+                      {dailyImgs[i] && (
+                        <div style={s.imgWrap}>
+                          <img src={dailyImgs[i]} alt="daily" style={s.img} />
+                        </div>
+                      )}
+
+                      <div style={s.viralTip}>💡 {post.viralTip}</div>
+                      <div style={s.actions}>
+                        <button style={s.copyBtn} onClick={() => doC4(dailyPostText(post), "d" + i)}>
+                          {copied4["d" + i] ? "✅ Copied!" : "📋 Copy Post"}
+                        </button>
+                        <button style={s.copyBtn} onClick={() => doC4(post.imagePrompt, "di" + i)}>
+                          {copied4["di" + i] ? "✅ Copied!" : "🎨 Copy Image Prompt"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === "history" && (
+          <div style={s.panel}>
+            <div style={s.secTitle}>📂 Recent Generations</div>
+            {history.length === 0 ? (
+              <div style={s.empty}>No posts yet. Generate your first one in the ⚡ Generate tab!</div>
+            ) : (
+              <div style={s.historyList}>
+                {history.map((h, i) => (
+                  <div key={h.id} style={s.historyCard}>
+                    <div style={s.historyMeta}>
+                      <span style={{ ...s.badge, background: (TYPES.find(t => t.id === h.contentType)?.color || "#111") + "22", color: TYPES.find(t => t.id === h.contentType)?.color || "#111" }}>
+                        {TYPES.find(t => t.id === h.contentType)?.icon} {TYPES.find(t => t.id === h.contentType)?.label}
+                      </span>
+                      <span style={s.badge}>{h.pillar}</span>
+                      <span style={s.time}>{h.ts}</span>
+                    </div>
+                    <div style={s.historyHook}>{h.hook}</div>
+                    <div style={s.actions}>
+                      <button style={s.smallBtn} onClick={() => doCopy(
+                        h.hook + "\n\n" + (h.caption || h.items?.join("\n\n") || "") + "\n\n" + h.cta + "\n\n" + (h.hashtags?.map(tag => "#" + tag.replace(/^#/, "")).join(" ") || ""),
+                        "h" + i
+                      )}>
+                        {copied === "h" + i ? "✅" : "📋"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+                                 }
+      
