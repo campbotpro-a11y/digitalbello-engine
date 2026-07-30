@@ -315,3 +315,474 @@ export default function App() {
     : "";
   const dailyPostText = (post) =>
     post.hook + "\n" + (post.items?.map((item, i) => (i + 1) + ". " + item).join("\n") || "") + "\n" + post.cta + "\n" + (post.hashtags?.map(h => "#" + h.replace(/^#/, "")).join(" ") || "") + "\n🎨 IMAGE PROMPT:\n" + post.imagePrompt;
+return (
+    <div style={s.root}>
+      <header style={s.header}>
+        <div style={s.hRow}>
+          <div style={s.logo}>
+            <div style={s.logoMark}>DB</div>
+            <div>
+              <div style={s.logoName}>DigitalBello</div>
+              <div style={s.logoSub}>Content Engine · Grok AI</div>
+            </div>
+          </div>
+          <div style={s.stats}>
+            {[
+              ["Posts", history.length],
+              ["Daily Sets", Math.floor(usedThemes.length / 4)],
+              ["Pillars", 5]
+            ].map(([l, v], i) => (
+              <div key={i} style={s.stat}>
+                <span style={s.statV}>{v}</span>
+                <span style={s.statL}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={s.tabs}>
+          {[
+            ["generate", "⚡ Generate"],
+            ["daily", "📅 Daily Plan"],
+            ["history", "📂 History (" + history.length + ")"]
+          ].map(([id, lbl]) => (
+            <button
+              key={id}
+              style={{ ...s.tab, ...(tab === id ? s.tabOn : {}) }}
+              onClick={() => setTab(id)}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main style={s.main}>
+        {tab === "generate" && (
+          <div style={s.panel}>
+            <div style={s.section}>
+              <div style={s.secTitle}>1. Pick a post type</div>
+              <div style={s.grid4}>
+                {TYPES.map(t => (
+                  <button
+                    key={t.id}
+                    style={{
+                      ...s.typeCard,
+                      borderColor: type === t.id ? t.color : "transparent",
+                      background: type === t.id ? t.color + "11" : "#fff",
+                    }}
+                    onClick={() => setType(t.id)}
+                  >
+                    <span style={{ fontSize: 24 }}>{t.icon}</span>
+                    <span style={{ ...s.typeLabel, color: t.color }}>{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.section}>
+              <div style={s.secTitle}>2. Content pillar</div>
+              <div style={s.grid5}>
+                {BRAND.contentPillars.map(p => (
+                  <button
+                    key={p}
+                    style={{
+                      ...s.pillBtn,
+                      background: pillar === p ? "#111" : "#f3f4f6",
+                      color: pillar === p ? "#fff" : "#374151",
+                    }}
+                    onClick={() => setPillar(p)}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={s.section}>
+              <div style={s.secTitle}>3. Topic (optional)</div>
+              <input
+                style={s.input}
+                value={topic}
+                onChange={e => setTopic(e.target.value)}
+                placeholder="e.g. How to use ChatGPT to write sales copy"
+              />
+              <div style={{ ...s.secTitle, marginTop: 12 }}>Extra context (optional)</div>
+              <input
+                style={s.input}
+                value={extra}
+                onChange={e => setExtra(e.target.value)}
+                placeholder="e.g. Target Nigerian students, mention mobile apps only"
+              />
+            </div>
+
+            <button
+              style={{
+                ...s.genBtn,
+                opacity: !type || !pillar ? 0.5 : 1,
+                cursor: !type || !pillar ? "not-allowed" : "pointer",
+              }}
+              onClick={generate}
+              disabled={!type || !pillar || loading}
+            >
+              {loading ? "✨ Generating with Grok..." : "⚡ Generate Post"}
+            </button>
+
+            {error && <div style={s.errorBox}>{error}</div>}
+
+            {result && (
+              <div style={s.resultBox}>
+                <div style={s.resultMeta}>
+                  <span style={{ ...s.badge, background: (typeObj?.color || "#111") + "22", color: typeObj?.color || "#111" }}>
+                    {typeObj?.icon} {typeObj?.label}
+                  </span>
+                  <span style={s.badge}>{result.pillar}</span>
+                  <span style={s.time}>{result.ts}</span>
+                </div>
+                <div style={s.hook}>{result.hook}</div>
+                <div style={s.caption}>{result.caption}</div>
+                <div style={s.cta}>{result.cta}</div>
+                <div style={s.tags}>
+                  {result.hashtags?.map((h, i) => (
+                    <span key={i} style={s.tag}>#{h.replace(/^#/, "")}</span>
+                  ))}
+                </div>
+                {imgLoad && <div style={s.imgLoading}>🎨 Generating image...</div>}
+                {imgUrl && (
+                  <div style={s.imgWrap}>
+                    <img src={imgUrl} alt="generated" style={s.img} />
+                  </div>
+                )}
+                <div style={s.viralTip}>💡 {result.viralTip}</div>
+                <div style={s.postingTime}>🕐 Best posting time: {result.postingTime}</div>
+                <div style={s.actions}>
+                  <button style={s.copyBtn} onClick={() => doCopy(fullPost, "main")}>
+                    {copied === "main" ? "✅ Copied!" : "📋 Copy Full Post"}
+                  </button>
+                  <button style={s.copyBtn} onClick={() => doCopy(result.imagePrompt, "img")}>
+                    {copied === "img" ? "✅ Copied!" : "🎨 Copy Image Prompt"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "daily" && (
+          <div style={s.panel}>
+            <div style={s.dailyHeader}>
+              <div style={s.dailyTitle}>📅 Daily Content Plan</div>
+              <div style={s.dailySub}>Generates 4 unique posts using Grok 3 Mini Fast</div>
+            </div>
+            <button
+              style={s.genBtn}
+              onClick={generateDaily}
+              disabled={dailyLoading}
+            >
+              {dailyLoading ? "✨ Cooking 4 posts with Grok..." : "📅 Generate Daily Plan (×4)"}
+            </button>
+            {dailyError && <div style={s.errorBox}>{dailyError}</div>}
+            {dailyPosts.length > 0 && (
+              <div style={s.dailyStats}>
+                Generated {dailyPosts.length} posts · {usedThemes.length} unique themes used
+              </div>
+            )}
+            <div style={s.dailyGrid}>
+              {dailyPosts.map((post, i) => (
+                <div
+                  key={post.id}
+                  style={{
+                    ...s.dailyCard,
+                    borderLeft: "4px solid " + post.format.color,
+                    boxShadow: activeCard === i ? "0 8px 30px rgba(0,0,0,0.12)" : "0 2px 8px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  <div
+                    style={s.dailyCardHeader}
+                    onClick={() => setActiveCard(activeCard === i ? -1 : i)}
+                  >
+                    <div style={s.dailyCardMeta}>
+                      <span style={{ fontSize: 20 }}>{post.format.icon}</span>
+                      <span style={{ ...s.dailyFmt, color: post.format.color }}>{post.format.label}</span>
+                      <span style={s.dailySeed}>{post.seed}</span>
+                    </div>
+                    <span style={s.chevron}>{activeCard === i ? "▲" : "▼"}</span>
+                  </div>
+                  {activeCard === i && (
+                    <div style={s.dailyCardBody}>
+                      <div style={s.hook}>{post.hook}</div>
+                      <div style={s.itemsList}>
+                        {post.items?.map((item, idx) => (
+                          <div key={idx} style={s.itemRow}>
+                            <span style={{ ...s.itemNum, background: post.format.color }}>{idx + 1}</span>
+                            <span style={s.itemText}>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={s.cta}>{post.cta}</div>
+                      <div style={s.tags}>
+                        {post.hashtags?.map((h, idx) => (
+                          <span key={idx} style={s.tag}>#{h.replace(/^#/, "")}</span>
+                        ))}
+                      </div>
+                      {dailyImgLoads[i] && <div style={s.imgLoading}>🎨 Generating image...</div>}
+                      {dailyImgs[i] && (
+                        <div style={s.imgWrap}>
+                          <img src={dailyImgs[i]} alt="daily" style={s.img} />
+                        </div>
+                      )}
+                      <div style={s.viralTip}>💡 {post.viralTip}</div>
+                      <div style={s.actions}>
+                        <button style={s.copyBtn} onClick={() => doC4(dailyPostText(post), "d" + i)}>
+                          {copied4["d" + i] ? "✅ Copied!" : "📋 Copy Post"}
+                        </button>
+                        <button style={s.copyBtn} onClick={() => doC4(post.imagePrompt, "di" + i)}>
+                          {copied4["di" + i] ? "✅ Copied!" : "🎨 Copy Image Prompt"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === "history" && (
+          <div style={s.panel}>
+            <div style={s.secTitle}>📂 Recent Generations</div>
+            {history.length === 0 ? (
+              <div style={s.empty}>No posts yet. Generate your first one in the ⚡ Generate tab!</div>
+            ) : (
+              <div style={s.historyList}>
+                {history.map((h, i) => (
+                  <div key={h.id} style={s.historyCard}>
+                    <div style={s.historyMeta}>
+                      <span style={{ ...s.badge, background: (TYPES.find(t => t.id === h.contentType)?.color || "#111") + "22", color: TYPES.find(t => t.id === h.contentType)?.color || "#111" }}>
+                        {TYPES.find(t => t.id === h.contentType)?.icon} {TYPES.find(t => t.id === h.contentType)?.label}
+                      </span>
+                      <span style={s.badge}>{h.pillar}</span>
+                      <span style={s.time}>{h.ts}</span>
+                    </div>
+                    <div style={s.historyHook}>{h.hook}</div>
+                    <div style={s.actions}>
+                      <button style={s.smallBtn} onClick={() => doCopy(
+                        h.hook + "\n" + (h.caption || h.items?.join("\n") || "") + "\n" + h.cta + "\n" + (h.hashtags?.map(tag => "#" + tag.replace(/^#/, "")).join(" ") || ""),
+                        "h" + i
+                      )}>
+                        {copied === "h" + i ? "✅" : "📋"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+const s = {
+  root: {
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    background: "#f8f9fb",
+    minHeight: "100vh",
+    color: "#111827",
+  },
+  header: {
+    background: "#fff",
+    borderBottom: "1px solid #e5e7eb",
+    padding: "20px 24px 0",
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+  },
+  hRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  logo: { display: "flex", alignItems: "center", gap: 12 },
+  logoMark: {
+    width: 40, height: 40, borderRadius: 10, background: "#111",
+    color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+    fontWeight: 700, fontSize: 16,
+  },
+  logoName: { fontWeight: 700, fontSize: 18, letterSpacing: "-0.5px" },
+  logoSub: { fontSize: 12, color: "#6b7280", marginTop: 2 },
+  stats: { display: "flex", gap: 16 },
+  stat: { display: "flex", flexDirection: "column", alignItems: "center" },
+  statV: { fontWeight: 700, fontSize: 18, color: "#111" },
+  statL: { fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px" },
+  tabs: { display: "flex", gap: 4, borderBottom: "1px solid #e5e7eb" },
+  tab: {
+    padding: "12px 20px",
+    border: "none",
+    background: "transparent",
+    cursor: "pointer",
+    fontSize: 14,
+    fontWeight: 500,
+    color: "#6b7280",
+    borderBottom: "2px solid transparent",
+    marginBottom: -1,
+    transition: "all 0.2s",
+  },
+  tabOn: {
+    color: "#111",
+    borderBottomColor: "#111",
+    fontWeight: 600,
+  },
+  main: { maxWidth: 800, margin: "0 auto", padding: "24px 16px 80px" },
+  panel: { display: "flex", flexDirection: "column", gap: 20 },
+  section: { background: "#fff", borderRadius: 14, padding: 20, border: "1px solid #e5e7eb" },
+  secTitle: { fontSize: 13, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 },
+  grid4: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 },
+  typeCard: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 6,
+    padding: "16px 8px",
+    borderRadius: 12,
+    border: "2px solid transparent",
+    cursor: "pointer",
+    transition: "all 0.15s",
+    background: "#fff",
+  },
+  typeLabel: { fontSize: 12, fontWeight: 600 },
+  grid5: { display: "flex", flexWrap: "wrap", gap: 8 },
+  pillBtn: {
+    padding: "8px 16px",
+    borderRadius: 20,
+    border: "none",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+    transition: "all 0.15s",
+  },
+  input: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    fontSize: 14,
+    outline: "none",
+    boxSizing: "border-box",
+  },
+  genBtn: {
+    background: "#111",
+    color: "#fff",
+    border: "none",
+    borderRadius: 12,
+    padding: "16px 24px",
+    fontSize: 15,
+    fontWeight: 600,
+    cursor: "pointer",
+    transition: "opacity 0.2s",
+  },
+  errorBox: {
+    background: "#fef2f2",
+    color: "#991b1b",
+    padding: "12px 16px",
+    borderRadius: 10,
+    fontSize: 13,
+    border: "1px solid #fecaca",
+  },
+  resultBox: {
+    background: "#fff",
+    borderRadius: 14,
+    padding: 24,
+    border: "1px solid #e5e7eb",
+    display: "flex",
+    flexDirection: "column",
+    gap: 14,
+  },
+  resultMeta: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
+  badge: {
+    padding: "4px 10px",
+    borderRadius: 20,
+    fontSize: 11,
+    fontWeight: 600,
+    background: "#f3f4f6",
+    color: "#374151",
+  },
+  time: { fontSize: 11, color: "#9ca3af", marginLeft: "auto" },
+  hook: { fontSize: 18, fontWeight: 700, lineHeight: 1.4, color: "#111" },
+  caption: { fontSize: 15, lineHeight: 1.7, color: "#374151", whiteSpace: "pre-line" },
+  cta: { fontSize: 15, fontWeight: 600, color: "#111", background: "#f3f4f6", padding: "12px 16px", borderRadius: 10 },
+  tags: { display: "flex", flexWrap: "wrap", gap: 6 },
+  tag: { fontSize: 12, color: "#0ea5e9", fontWeight: 500 },
+  imgLoading: { fontSize: 13, color: "#6b7280", fontStyle: "italic" },
+  imgWrap: { borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb" },
+  img: { width: "100%", display: "block" },
+  viralTip: { fontSize: 13, color: "#059669", background: "#ecfdf5", padding: "10px 14px", borderRadius: 8 },
+  postingTime: { fontSize: 12, color: "#6b7280" },
+  actions: { display: "flex", gap: 10, marginTop: 4 },
+  copyBtn: {
+    padding: "10px 16px",
+    borderRadius: 8,
+    border: "1px solid #e5e7eb",
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 500,
+    transition: "all 0.15s",
+  },
+  dailyHeader: { textAlign: "center", marginBottom: 8 },
+  dailyTitle: { fontSize: 20, fontWeight: 700 },
+  dailySub: { fontSize: 13, color: "#6b7280", marginTop: 4 },
+  dailyStats: { fontSize: 12, color: "#6b7280", textAlign: "center" },
+  dailyGrid: { display: "flex", flexDirection: "column", gap: 12 },
+  dailyCard: {
+    background: "#fff",
+    borderRadius: 12,
+    border: "1px solid #e5e7eb",
+    overflow: "hidden",
+    transition: "all 0.2s",
+  },
+  dailyCardHeader: {
+    padding: "16px 20px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    cursor: "pointer",
+  },
+  dailyCardMeta: { display: "flex", alignItems: "center", gap: 10 },
+  dailyFmt: { fontSize: 13, fontWeight: 600 },
+  dailySeed: { fontSize: 12, color: "#9ca3af" },
+  chevron: { fontSize: 12, color: "#9ca3af" },
+  dailyCardBody: { padding: "0 20px 20px", display: "flex", flexDirection: "column", gap: 12 },
+  itemsList: { display: "flex", flexDirection: "column", gap: 10 },
+  itemRow: { display: "flex", gap: 10, alignItems: "flex-start" },
+  itemNum: {
+    width: 22, height: 22, borderRadius: "50%", color: "#fff",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 2,
+  },
+  itemText: { fontSize: 14, lineHeight: 1.6, color: "#374151", flex: 1 },
+  historyList: { display: "flex", flexDirection: "column", gap: 10 },
+  historyCard: {
+    background: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    border: "1px solid #e5e7eb",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  historyMeta: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" },
+  historyHook: { fontSize: 14, fontWeight: 600, color: "#111", lineHeight: 1.4 },
+  smallBtn: {
+    padding: "6px 12px",
+    borderRadius: 6,
+    border: "1px solid #e5e7eb",
+    background: "#fff",
+    cursor: "pointer",
+    fontSize: 12,
+  },
+  empty: { textAlign: "center", color: "#9ca3af", padding: "40px 20px", fontSize: 14 },
+};
